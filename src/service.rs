@@ -10,18 +10,40 @@ use sc_handle::ScHandle;
 use {ErrorKind, Result};
 
 /// Enum describing the types of Windows services.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[repr(u32)]
 pub enum ServiceType {
     /// Service that runs in its own process.
+    FileSystemDriver = winnt::SERVICE_FILE_SYSTEM_DRIVER,
+    KernelDriver = winnt::SERVICE_KERNEL_DRIVER,
+    Adapter = winnt::SERVICE_ADAPTER,
+    RecognizerDriver = winnt::SERVICE_RECOGNIZER_DRIVER,
     OwnProcess = winnt::SERVICE_WIN32_OWN_PROCESS,
+    Win32ShareProcess = winnt::SERVICE_WIN32_SHARE_PROCESS,
+    UserService = winnt::SERVICE_USER_SERVICE,
+    UserServiceInstance = winnt::SERVICE_USERSERVICE_INSTANCE,
+    InteractiveProcess = winnt::SERVICE_INTERACTIVE_PROCESS,
+    PkgService = winnt::SERVICE_PKG_SERVICE,
+    InvalidServiceType = 288,
 }
 
 impl ServiceType {
     pub fn from_raw(raw_value: u32) -> Result<Self> {
         let service_type = match raw_value {
+            x if x == ServiceType::FileSystemDriver.to_raw() => ServiceType::FileSystemDriver,
+            x if x == ServiceType::KernelDriver.to_raw() => ServiceType::KernelDriver,
+            x if x == ServiceType::Adapter.to_raw() => ServiceType::Adapter,
+            x if x == ServiceType::RecognizerDriver.to_raw() => ServiceType::RecognizerDriver,
             x if x == ServiceType::OwnProcess.to_raw() => ServiceType::OwnProcess,
-            _ => Err(ErrorKind::InvalidServiceType(raw_value))?,
+            x if x == ServiceType::Win32ShareProcess.to_raw() => ServiceType::Win32ShareProcess,
+            x if x == ServiceType::UserService.to_raw() => ServiceType::UserService,
+            x if x == ServiceType::UserServiceInstance.to_raw() => ServiceType::UserServiceInstance,
+            x if x == ServiceType::InteractiveProcess.to_raw() => ServiceType::InteractiveProcess,
+            x if x == ServiceType::PkgService.to_raw() => ServiceType::PkgService,
+            _ => {
+                //Err(ErrorKind::InvalidServiceType(raw_value))?
+                ServiceType::InvalidServiceType
+            },
         };
         Ok(service_type)
     }
@@ -33,6 +55,7 @@ impl ServiceType {
 
 bitflags! {
     /// Flags describing the access permissions when working with services
+    #[derive(Serialize)]
     pub struct ServiceAccess: u32 {
         /// Can query the service status
         const QUERY_STATUS = winsvc::SERVICE_QUERY_STATUS;
@@ -55,27 +78,41 @@ bitflags! {
 }
 
 /// Enum describing the start options for windows services.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[repr(u32)]
 pub enum ServiceStartType {
     /// Autostart on system startup
+    BootStart = winnt::SERVICE_BOOT_START,
     AutoStart = winnt::SERVICE_AUTO_START,
     /// Service is enabled, can be started manually
     OnDemand = winnt::SERVICE_DEMAND_START,
     /// Disabled service
     Disabled = winnt::SERVICE_DISABLED,
+    SystemStart = winnt::SERVICE_SYSTEM_START,
 }
 
 impl ServiceStartType {
     pub fn to_raw(&self) -> u32 {
         *self as u32
     }
+
+    pub fn from_raw(raw_value: u32) -> Result<Self> {
+        let service_type = match raw_value {
+            x if x == ServiceStartType::AutoStart.to_raw() => ServiceStartType::AutoStart,
+            x if x == ServiceStartType::BootStart.to_raw() => ServiceStartType::BootStart,
+            x if x == ServiceStartType::OnDemand.to_raw() => ServiceStartType::OnDemand,
+            x if x == ServiceStartType::SystemStart.to_raw() => ServiceStartType::SystemStart,
+            x if x == ServiceStartType::Disabled.to_raw() => ServiceStartType::Disabled,
+            _ => Err(ErrorKind::InvalidServiceStartType(raw_value))?,
+        };
+        Ok(service_type)
+    }
 }
 
 /// Error handling strategy for service failures.
 ///
 /// See <https://msdn.microsoft.com/en-us/library/windows/desktop/ms682450(v=vs.85).aspx>
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[repr(u32)]
 pub enum ServiceErrorControl {
     Critical = winnt::SERVICE_ERROR_CRITICAL,
@@ -88,10 +125,22 @@ impl ServiceErrorControl {
     pub fn to_raw(&self) -> u32 {
         *self as u32
     }
+
+    pub fn from_raw(raw_value: u32) -> Result<Self> {
+        let service_type = match raw_value {
+            x if x == ServiceErrorControl::Critical.to_raw() => ServiceErrorControl::Critical,
+            x if x == ServiceErrorControl::Ignore.to_raw() => ServiceErrorControl::Ignore,
+            x if x == ServiceErrorControl::Normal.to_raw() => ServiceErrorControl::Normal,
+            x if x == ServiceErrorControl::Severe.to_raw() => ServiceErrorControl::Severe,
+            _ => Err(ErrorKind::InvalidServiceStartType(raw_value))?,
+        };
+        Ok(service_type)
+    }
 }
 
 /// A struct that describes the service.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ServiceInfo {
     /// Service name
     pub name: OsString,
@@ -126,7 +175,7 @@ pub struct ServiceInfo {
 }
 
 /// Enum describing the service control operations.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[repr(u32)]
 pub enum ServiceControl {
     Continue = winsvc::SERVICE_CONTROL_CONTINUE,
@@ -167,7 +216,7 @@ impl ServiceControl {
 }
 
 /// Service state returned as a part of [`ServiceStatus`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[repr(u32)]
 pub enum ServiceState {
     Stopped = winsvc::SERVICE_STOPPED,
@@ -180,7 +229,7 @@ pub enum ServiceState {
 }
 
 impl ServiceState {
-    fn from_raw(raw_state: u32) -> Result<Self> {
+    pub fn from_raw(raw_state: u32) -> Result<Self> {
         let service_state = match raw_state {
             x if x == ServiceState::Stopped.to_raw() => ServiceState::Stopped,
             x if x == ServiceState::StartPending.to_raw() => ServiceState::StartPending,
@@ -213,7 +262,7 @@ impl ServiceState {
 ///
 /// [`dwWin32ExitCode`]: winsvc::SERVICE_STATUS::dwWin32ExitCode
 /// [`dwServiceSpecificExitCode`]: winsvc::SERVICE_STATUS::dwServiceSpecificExitCode
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub enum ServiceExitCode {
     Win32(u32),
     ServiceSpecific(u32),
@@ -250,8 +299,19 @@ impl<'a> From<&'a winsvc::SERVICE_STATUS> for ServiceExitCode {
     }
 }
 
+impl<'a> From<&'a winsvc::SERVICE_STATUS_PROCESS> for ServiceExitCode {
+    fn from(service_status: &'a winsvc::SERVICE_STATUS_PROCESS) -> Self {
+        if service_status.dwWin32ExitCode == ERROR_SERVICE_SPECIFIC_ERROR {
+            ServiceExitCode::ServiceSpecific(service_status.dwServiceSpecificExitCode)
+        } else {
+            ServiceExitCode::Win32(service_status.dwWin32ExitCode)
+        }
+    }
+}
+
 bitflags! {
     /// Flags describing accepted types of service control events.
+    #[derive(Serialize)]
     pub struct ServiceControlAccept: u32 {
         /// The service is a network component that can accept changes in its binding without being
         /// stopped and restarted. This allows service to receive `ServiceControl::Netbind*`
@@ -276,6 +336,25 @@ bitflags! {
         const STOP = winsvc::SERVICE_ACCEPT_STOP;
     }
 }
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServiceStatusExt {
+    pub status: ServiceStatus,
+
+    pub process_id: u32,
+
+    pub service_flags: u32
+}
+
+impl ServiceStatusExt {
+    pub fn from_raw(raw_status: winsvc::SERVICE_STATUS_PROCESS) -> Result<Self> {
+        Ok(ServiceStatusExt {
+            service_flags: raw_status.dwServiceFlags,
+            process_id: raw_status.dwProcessId,
+            status: ServiceStatus::from_raw_ex(raw_status)?,
+        })
+    }
+}
 
 /// Service status.
 ///
@@ -286,7 +365,8 @@ bitflags! {
 /// <https://msdn.microsoft.com/en-us/library/windows/desktop/ms685996(v=vs.85).aspx>
 ///
 /// [`SERVICE_STATUS`]: winsvc::SERVICE_STATUS
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ServiceStatus {
     /// Type of service.
     pub service_type: ServiceType,
@@ -312,7 +392,7 @@ pub struct ServiceStatus {
     /// This basically works as a timeout until the system assumes that the service hung.
     /// This could be either circumvented by updating the [`ServiceStatus::current_state`] or
     /// incrementing a [`ServiceStatus::checkpoint`] value.
-    pub wait_hint: Duration,
+    pub wait_hint: Duration
 }
 
 impl ServiceStatus {
@@ -332,7 +412,7 @@ impl ServiceStatus {
         raw_status
     }
 
-    fn from_raw(raw_status: winsvc::SERVICE_STATUS) -> Result<Self> {
+    pub fn from_raw(raw_status: winsvc::SERVICE_STATUS) -> Result<Self> {
         Ok(ServiceStatus {
             service_type: ServiceType::from_raw(raw_status.dwServiceType)?,
             current_state: ServiceState::from_raw(raw_status.dwCurrentState)?,
@@ -341,10 +421,25 @@ impl ServiceStatus {
             ),
             exit_code: ServiceExitCode::from(&raw_status),
             checkpoint: raw_status.dwCheckPoint,
-            wait_hint: Duration::from_millis(raw_status.dwWaitHint as u64),
+            wait_hint: Duration::from_millis(raw_status.dwWaitHint as u64)
+        })
+    }
+
+    pub fn from_raw_ex(raw_status: winsvc::SERVICE_STATUS_PROCESS) -> Result<Self> {
+        Ok(ServiceStatus {
+            service_type: ServiceType::from_raw(raw_status.dwServiceType)?,
+            current_state: ServiceState::from_raw(raw_status.dwCurrentState)?,
+            controls_accepted: ServiceControlAccept::from_bits_truncate(
+                raw_status.dwControlsAccepted,
+            ),
+            exit_code: ServiceExitCode::from(&raw_status),
+            checkpoint: raw_status.dwCheckPoint,
+            wait_hint: Duration::from_millis(raw_status.dwWaitHint as u64)
+
         })
     }
 }
+
 
 /// A struct that represents a system service.
 ///
@@ -405,4 +500,58 @@ impl Service {
             Err(io::Error::last_os_error().into())
         }
     }
+
+
 }
+
+
+pub struct EnumListServiceResult {
+    entry_point: *const u8,
+    index: usize,
+    size: usize,
+}
+
+impl EnumListServiceResult {
+    pub fn from_raw(entry_point: *const u8, size: u32) -> EnumListServiceResult {
+        EnumListServiceResult {entry_point, index: 0, size : size as usize}
+    }
+}
+
+impl Iterator for EnumListServiceResult {
+    type Item = winsvc::ENUM_SERVICE_STATUS_PROCESSW;
+    fn next(&mut self) -> Option<winsvc::ENUM_SERVICE_STATUS_PROCESSW> {
+
+        if self.index < self.size {
+
+            let result: *mut winsvc::ENUM_SERVICE_STATUS_PROCESSW = unsafe {
+                mem::transmute(self.entry_point.offset((self.index * mem::size_of::<winsvc::ENUM_SERVICE_STATUS_PROCESSW>()) as isize))
+            };
+
+            self.index += 1;
+
+            Some(unsafe {*result})
+
+        } else {
+            None
+        }
+
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServiceDetail {
+    pub status: ServiceStatusExt,
+    pub name: String,
+    pub display_name: String,
+    pub binary_path: String,
+    pub start_type: ServiceStartType,
+    pub error_control: ServiceErrorControl,
+    pub load_order_group: String,
+    pub tag_id: u32,
+    pub dependencies: String,
+    pub start_name: String
+}
+
+
+

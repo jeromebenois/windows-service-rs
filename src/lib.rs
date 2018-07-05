@@ -181,6 +181,10 @@ extern crate bitflags;
 extern crate error_chain;
 extern crate widestring;
 extern crate winapi;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde;
+extern crate serde_json;
 
 pub use error_chain::ChainedError;
 
@@ -223,6 +227,11 @@ error_chain! {
         InvalidServiceType(raw_value: u32) {
             description("Invalid service type value")
             display("Invalid service type value: {}", raw_value)
+        }
+        /// Invalid raw representation of [`ServiceStartType`].
+        InvalidServiceStartType(raw_value: u32) {
+            description("Invalid service start type value")
+            display("Invalid service start type value: {}", raw_value)
         }
         /// Invalid raw representation of [`ServiceState`].
         InvalidServiceState(raw_value: u32) {
