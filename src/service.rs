@@ -544,13 +544,13 @@ pub struct ServiceDetail {
     pub status: ServiceStatusExt,
     pub name: String,
     pub display_name: String,
-    pub binary_path: String,
-    pub start_type: ServiceStartType,
-    pub error_control: ServiceErrorControl,
-    pub load_order_group: String,
-    pub tag_id: u32,
-    pub dependencies: String,
-    pub start_name: String
+    pub binary_path: Option<String>,
+    pub start_type: Option<ServiceStartType>,
+    pub error_control: Option<ServiceErrorControl>,
+    pub load_order_group: Option<String>,
+    pub tag_id: Option<u32>,
+    pub dependencies: Option<String>,
+    pub start_name: Option<String>
 }
 
 

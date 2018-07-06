@@ -285,33 +285,48 @@ impl ServiceManager {
                                                               service_status.lpServiceName,
                                                               winsvc::SC_MANAGER_ALL_ACCESS) };
 
-
                     let mut pcb_bytes_needed = 0;
                     unsafe { winsvc::QueryServiceConfigW(handle_service, std::ptr::null_mut(), 0, &mut pcb_bytes_needed) };
 
-                    let mut tmp = vec![0u8; pcb_bytes_needed as usize];
-                    let query_service_config: *mut winsvc::QUERY_SERVICE_CONFIGW = unsafe { mem::transmute(tmp.as_mut_ptr()) };
+                    if pcb_bytes_needed > 0 {
+                        let mut tmp = vec![0u8; pcb_bytes_needed as usize];
+                        let query_service_config: *mut winsvc::QUERY_SERVICE_CONFIGW = unsafe { mem::transmute(tmp.as_mut_ptr()) };
 
-                    unsafe { winsvc::QueryServiceConfigW(handle_service, query_service_config, pcb_bytes_needed + 0, &mut pcb_bytes_needed) };
+                        unsafe { winsvc::QueryServiceConfigW(handle_service, query_service_config, pcb_bytes_needed + 0, &mut pcb_bytes_needed) };
 
+                        let service_detail = unsafe { ServiceDetail {
+                            status: ServiceStatusExt::from_raw(service_status.ServiceStatusProcess)?,
+                            name: WideCStr::from_ptr_str(service_status.lpServiceName).to_string_lossy(),
+                            display_name: WideCStr::from_ptr_str(service_status.lpDisplayName).to_string_lossy(),
+                            binary_path: Some(WideCStr::from_ptr_str((*query_service_config).lpBinaryPathName).to_string_lossy()),
+                            start_type: Some(ServiceStartType::from_raw((*query_service_config).dwStartType)?),
+                            error_control: Some(ServiceErrorControl::from_raw((*query_service_config).dwErrorControl)?),
+                            tag_id: Some((*query_service_config).dwErrorControl),
+                            start_name: Some(WideCStr::from_ptr_str((*query_service_config).lpServiceStartName).to_string_lossy()),
+                            load_order_group: Some(WideCStr::from_ptr_str((*query_service_config).lpLoadOrderGroup).to_string_lossy()),
+                            dependencies: Some(WideCStr::from_ptr_str((*query_service_config).lpDependencies).to_string_lossy())
 
-                    let service_detail = unsafe { ServiceDetail {
-                        status: ServiceStatusExt::from_raw(service_status.ServiceStatusProcess)?,
-                        name: WideCStr::from_ptr_str(service_status.lpServiceName).to_string_lossy(),
-                        display_name: WideCStr::from_ptr_str(service_status.lpDisplayName).to_string_lossy(),
-                        binary_path: WideCStr::from_ptr_str((*query_service_config).lpBinaryPathName).to_string_lossy(),
-                        start_type: ServiceStartType::from_raw((*query_service_config).dwStartType)?,
-                        error_control: ServiceErrorControl::from_raw((*query_service_config).dwErrorControl)?,
-                        tag_id: (*query_service_config).dwErrorControl,
-                        start_name: WideCStr::from_ptr_str((*query_service_config).lpServiceStartName).to_string_lossy(),
-                        load_order_group: WideCStr::from_ptr_str((*query_service_config).lpLoadOrderGroup).to_string_lossy(),
-                        dependencies: WideCStr::from_ptr_str((*query_service_config).lpDependencies).to_string_lossy()
+                        }};
 
-                    }};
+                        service_list.push(service_detail);
+                    } else {
 
-                    //println!("service_detail :{:?}", service_detail);
+                        let service_detail = unsafe { ServiceDetail {
+                            status: ServiceStatusExt::from_raw(service_status.ServiceStatusProcess)?,
+                            name: WideCStr::from_ptr_str(service_status.lpServiceName).to_string_lossy(),
+                            display_name: WideCStr::from_ptr_str(service_status.lpDisplayName).to_string_lossy(),
+                            binary_path: Some(format!("Error when retrieving info for service {}", io::Error::last_os_error())),
+                            start_type: None,
+                            error_control: None,
+                            tag_id: None,
+                            start_name: None,
+                            load_order_group: None,
+                            dependencies: None
 
-                    service_list.push(service_detail);
+                        }};
+
+                        service_list.push(service_detail);
+                    }
                 }
         }
 
