@@ -14,7 +14,6 @@ use shell_escape;
 use {ErrorKind, Result, ResultExt};
 use widestring::WideCStr;
 use std;
-use std::ffi::OsString;
 use service::*;
 use std::mem;
 use service::EnumListServiceResult;
@@ -246,7 +245,7 @@ impl ServiceManager {
         let mut pcb_bytes_needed = 0;
         let mut lp_services_returned = 0;
         let mut lp_resume_handle = 0;
-        let res = unsafe {
+        unsafe {
             winsvc::EnumServicesStatusExW(self.manager_handle.raw_handle(),
                                           winsvc::SC_ENUM_PROCESS_INFO,
                                   winnt::SERVICE_WIN32 | winnt::SERVICE_DRIVER,//SERVICE_TYPE_ALL,
@@ -260,12 +259,12 @@ impl ServiceManager {
             )
         };
 
-        let last_error = io::Error::last_os_error();
+        let last_error = io::Error::last_os_error().raw_os_error().unwrap_or(0);
 
-        if io::Error::from_raw_os_error(winerror::ERROR_MORE_DATA as i32).kind() == last_error.kind() {
+        if winerror::ERROR_MORE_DATA as i32 == last_error {
             let mut lp_services = vec![unsafe { std::mem::uninitialized() }; pcb_bytes_needed as usize];
 
-            let res = unsafe {
+           unsafe {
                 winsvc::EnumServicesStatusExW(self.manager_handle.raw_handle(),
                                               winsvc::SC_ENUM_PROCESS_INFO,
                                               winnt::SERVICE_WIN32 | winnt::SERVICE_DRIVER,//SERVICE_TYPE_ALL,
@@ -279,42 +278,40 @@ impl ServiceManager {
                 )
             };
 
-            unsafe {
-                let mut enum_result = EnumListServiceResult::from_raw(lp_services.as_slice().as_ptr(), lp_services_returned);
-                for service_status in enum_result
-                    {
-                        let handle_service = winsvc::OpenServiceW(self.manager_handle.raw_handle(),
-                                                                  service_status.lpServiceName,
-                                                                  winsvc::SC_MANAGER_ALL_ACCESS);
+            let enum_result = EnumListServiceResult::from_raw(lp_services.as_slice().as_ptr(), lp_services_returned);
+            for service_status in enum_result
+                {
+                    let handle_service = unsafe { winsvc::OpenServiceW(self.manager_handle.raw_handle(),
+                                                              service_status.lpServiceName,
+                                                              winsvc::SC_MANAGER_ALL_ACCESS) };
 
 
-                        let mut pcb_bytes_needed = 0;
-                        winsvc::QueryServiceConfigW(handle_service, std::ptr::null_mut(), 0, &mut pcb_bytes_needed);
+                    let mut pcb_bytes_needed = 0;
+                    unsafe { winsvc::QueryServiceConfigW(handle_service, std::ptr::null_mut(), 0, &mut pcb_bytes_needed) };
 
-                        let query_service_config: *mut winsvc::QUERY_SERVICE_CONFIGW = unsafe { mem::transmute(vec![0u8; pcb_bytes_needed as usize].as_mut_ptr()) };
+                    let query_service_config: *mut winsvc::QUERY_SERVICE_CONFIGW = unsafe { mem::transmute(vec![0u8; pcb_bytes_needed as usize].as_mut_ptr()) };
 
-                        winsvc::QueryServiceConfigW(handle_service, query_service_config, pcb_bytes_needed + 0, &mut pcb_bytes_needed);
+                    unsafe { winsvc::QueryServiceConfigW(handle_service, query_service_config, pcb_bytes_needed + 0, &mut pcb_bytes_needed) };
 
 
-                        let service_detail = ServiceDetail {
-                            status: ServiceStatusExt::from_raw(service_status.ServiceStatusProcess)?,
-                            name: WideCStr::from_ptr_str(service_status.lpServiceName).to_string_lossy(),
-                            display_name: WideCStr::from_ptr_str(service_status.lpDisplayName).to_string_lossy(),
-                            binary_path: WideCStr::from_ptr_str((*query_service_config).lpBinaryPathName).to_string_lossy(),
-                            start_type: ServiceStartType::from_raw((*query_service_config).dwStartType)?,
-                            error_control: ServiceErrorControl::from_raw((*query_service_config).dwErrorControl)?,
-                            tag_id: (*query_service_config).dwErrorControl,
-                            start_name: WideCStr::from_ptr_str((*query_service_config).lpServiceStartName).to_string_lossy(),
-                            load_order_group: WideCStr::from_ptr_str((*query_service_config).lpLoadOrderGroup).to_string_lossy(),
-                            dependencies: WideCStr::from_ptr_str((*query_service_config).lpDependencies).to_string_lossy()
+                    let service_detail = unsafe { ServiceDetail {
+                        status: ServiceStatusExt::from_raw(service_status.ServiceStatusProcess)?,
+                        name: WideCStr::from_ptr_str(service_status.lpServiceName).to_string_lossy(),
+                        display_name: WideCStr::from_ptr_str(service_status.lpDisplayName).to_string_lossy(),
+                        binary_path: WideCStr::from_ptr_str((*query_service_config).lpBinaryPathName).to_string_lossy(),
+                        start_type: ServiceStartType::from_raw((*query_service_config).dwStartType)?,
+                        error_control: ServiceErrorControl::from_raw((*query_service_config).dwErrorControl)?,
+                        tag_id: (*query_service_config).dwErrorControl,
+                        start_name: WideCStr::from_ptr_str((*query_service_config).lpServiceStartName).to_string_lossy(),
+                        load_order_group: WideCStr::from_ptr_str((*query_service_config).lpLoadOrderGroup).to_string_lossy(),
+                        dependencies: WideCStr::from_ptr_str((*query_service_config).lpDependencies).to_string_lossy()
 
-                        };
+                    }};
 
-                        println!("service_detail :{:?}", service_detail);
+                    //println!("service_detail :{:?}", service_detail);
 
-                        service_list.push(service_detail);
-                    }
-            }
+                    service_list.push(service_detail);
+                }
         }
 
         Ok(service_list)
