@@ -289,7 +289,8 @@ impl ServiceManager {
                     let mut pcb_bytes_needed = 0;
                     unsafe { winsvc::QueryServiceConfigW(handle_service, std::ptr::null_mut(), 0, &mut pcb_bytes_needed) };
 
-                    let query_service_config: *mut winsvc::QUERY_SERVICE_CONFIGW = unsafe { mem::transmute(vec![0u8; pcb_bytes_needed as usize].as_mut_ptr()) };
+                    let mut tmp = vec![0u8; pcb_bytes_needed as usize];
+                    let query_service_config: *mut winsvc::QUERY_SERVICE_CONFIGW = unsafe { mem::transmute(tmp.as_mut_ptr()) };
 
                     unsafe { winsvc::QueryServiceConfigW(handle_service, query_service_config, pcb_bytes_needed + 0, &mut pcb_bytes_needed) };
 
