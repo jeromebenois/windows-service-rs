@@ -327,6 +327,7 @@ impl ServiceManager {
 
                         service_list.push(service_detail);
                     }
+                    unsafe { winsvc::CloseServiceHandle(handle_service)};
                 }
         }
 
