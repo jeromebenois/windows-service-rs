@@ -74,6 +74,9 @@ bitflags! {
         /// Can ask the service to report its status
         const INTERROGATE = winsvc::SERVICE_INTERROGATE;
 
+        /// Can change config of the service
+        const SERVICE_CHANGE_CONFIG = winsvc::SERVICE_CHANGE_CONFIG;
+
         /// Can delete the service
         const DELETE = winnt::DELETE;
     }
