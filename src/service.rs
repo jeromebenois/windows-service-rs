@@ -189,6 +189,7 @@ pub enum ServiceControl {
     Preshutdown = winsvc::SERVICE_CONTROL_PRESHUTDOWN,
     Shutdown = winsvc::SERVICE_CONTROL_SHUTDOWN,
     Stop = winsvc::SERVICE_CONTROL_STOP,
+    DeviceEvent = winsvc::SERVICE_CONTROL_DEVICEEVENT,
 }
 
 impl ServiceControl {
@@ -205,6 +206,7 @@ impl ServiceControl {
             x if x == ServiceControl::Preshutdown.to_raw() => ServiceControl::Preshutdown,
             x if x == ServiceControl::Shutdown.to_raw() => ServiceControl::Shutdown,
             x if x == ServiceControl::Stop.to_raw() => ServiceControl::Stop,
+            x if x == ServiceControl::DeviceEvent.to_raw() => ServiceControl::DeviceEvent,
             other => Err(ErrorKind::InvalidServiceControl(other))?,
         };
         Ok(service_control)

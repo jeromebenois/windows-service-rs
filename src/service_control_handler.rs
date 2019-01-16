@@ -6,6 +6,14 @@ use winapi::um::winsvc;
 
 use service::{ServiceControl, ServiceStatus};
 use {ErrorKind, Result, ResultExt};
+use winapi::shared::usbiodef;
+use winapi::um::winuser;
+use winapi::shared::ntdef::HANDLE;
+use winapi::shared::minwindef::LPVOID;
+use std::mem;
+use winapi::um::dbt::DBT_DEVTYP_DEVICEINTERFACE;
+use winapi::um::dbt::DEV_BROADCAST_DEVICEINTERFACE_A;
+
 
 /// A struct that holds a unique token for updating the status of the corresponding service.
 #[derive(Debug, Clone, Copy)]
@@ -24,6 +32,23 @@ impl ServiceStatusHandle {
             Err(io::Error::last_os_error())
         } else {
             Ok(())
+        }
+    }
+
+    pub fn subscribe_usb_event(&self) {
+        let filter = Box::new(DEV_BROADCAST_DEVICEINTERFACE_A {
+            dbcc_size: mem::size_of::<DEV_BROADCAST_DEVICEINTERFACE_A>() as u32,
+            dbcc_devicetype: DBT_DEVTYP_DEVICEINTERFACE,
+            dbcc_reserved: 0,
+            dbcc_classguid: usbiodef::GUID_DEVINTERFACE_USB_DEVICE,
+            dbcc_name: [0],
+        });
+        unsafe {
+            winuser::RegisterDeviceNotificationA(
+                self.0 as HANDLE,
+                Box::into_raw(filter) as LPVOID,
+                winuser::DEVICE_NOTIFY_SERVICE_HANDLE,
+            );
         }
     }
 }
@@ -91,7 +116,7 @@ impl ServiceControlHandlerResult {
 ///
 /// # fn main() {}
 /// ```
-pub fn register<S, F>(service_name: S, event_handler: F) -> Result<ServiceStatusHandle>
+pub fn register<S, F>(service_name: S, event_handler: F, ) -> Result<ServiceStatusHandle>
 where
     S: AsRef<OsStr>,
     F: Fn(ServiceControl) -> ServiceControlHandlerResult + 'static + Send,
