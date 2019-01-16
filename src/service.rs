@@ -8,6 +8,8 @@ use winapi::um::{winnt, winsvc};
 
 use sc_handle::ScHandle;
 use {ErrorKind, Result};
+use winapi::um::winsvc::SERVICE_NO_CHANGE;
+use std::ptr;
 
 /// Enum describing the types of Windows services.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
@@ -503,7 +505,29 @@ impl Service {
         }
     }
 
+    pub fn modify_start_type(&self, start_type: ServiceStartType) -> io::Result<()> {
+        let success = unsafe {
+            winsvc::ChangeServiceConfigW(
+                self.service_handle.raw_handle(),
+                SERVICE_NO_CHANGE,
+                start_type.to_raw(),
+                SERVICE_NO_CHANGE,
+                ptr::null(),
+                ptr::null(),
+                ptr::null_mut(),
+                ptr::null(),
+                ptr::null(),
+                ptr::null(),
+                ptr::null()
+            )
+        };
 
+        if success == 1 {
+            Ok(())
+        } else {
+            Err(io::Error::last_os_error().into())
+        }
+    }
 }
 
 
