@@ -35,7 +35,7 @@ impl ServiceStatusHandle {
         }
     }
 
-    pub fn subscribe_usb_event(&self) {
+    pub fn subscribe_device_event(&self) {
         let filter = Box::new(DEV_BROADCAST_DEVICEINTERFACE_A {
             dbcc_size: mem::size_of::<DEV_BROADCAST_DEVICEINTERFACE_A>() as u32,
             dbcc_devicetype: DBT_DEVTYP_DEVICEINTERFACE,
