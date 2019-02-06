@@ -148,6 +148,73 @@ where
     }
 }
 
+
+/// Register a closure for receiving service events.
+///
+/// Returns [`ServiceStatusHandle`] that can be used to report the service status back to the
+/// system.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use std::ffi::OsString;
+/// use windows_service::service::ServiceControl;
+/// use windows_service::service_control_handler::{self, ServiceControlHandlerResult};
+///
+/// fn my_service_main(_arguments: Vec<OsString>) {
+///     if let Err(_e) = run_service() {
+///         // Handle errors...
+///     }
+/// }
+///
+/// fn run_service() -> windows_service::Result<()> {
+///     let event_handler = move |control_event, event_type, event_data| -> ServiceControlHandlerResult {
+///         match control_event {
+///             ServiceControl::DeviceEvent => {
+///                 let dbh: *mut DEV_BROADCAST_HDR = event_data as *mut DEV_BROADCAST_HDR;
+///                 ServiceControlHandlerResult::NoError
+///             },
+///             _ => ServiceControlHandlerResult::NotImplemented,
+///         }
+///     };
+///     let status_handle = service_control_handler::register("my_service_name", event_handler)?;
+///     Ok(())
+/// }
+///
+/// # fn main() {}
+/// ```
+pub fn register_with_event_data<S, F>(service_name: S, event_handler: F, ) -> Result<ServiceStatusHandle>
+    where
+        S: AsRef<OsStr>,
+        F: Fn(ServiceControl, u32, *mut ::std::os::raw::c_void) -> ServiceControlHandlerResult + 'static + Send,
+{
+    // Move closure data on heap.
+    // The Box<HandlerFn> is a trait object and is stored on stack at this point.
+    let heap_event_handler = Box::new(event_handler) as Box<HandlerFnWithData>;
+
+    // Box again to move trait object to heap.
+    let boxed_event_handler: Box<Box<HandlerFnWithData>> = Box::new(heap_event_handler);
+
+    // Important: leak the Box<Box<HandlerFn>> which will be released in `service_control_handler`.
+    let context = Box::into_raw(boxed_event_handler) as *mut ::std::os::raw::c_void;
+
+    let service_name =
+        WideCString::from_str(service_name).chain_err(|| ErrorKind::InvalidServiceName)?;
+    let status_handle = unsafe {
+        winsvc::RegisterServiceCtrlHandlerExW(
+            service_name.as_ptr(),
+            Some(service_control_handler_with_event_data),
+            context,
+        )
+    };
+
+    if status_handle.is_null() {
+        Err(io::Error::last_os_error().into())
+    } else {
+        Ok(ServiceStatusHandle::from_handle(status_handle))
+    }
+}
+
 /// Alias for control event handler closure.
 type HandlerFn = Fn(ServiceControl) -> ServiceControlHandlerResult;
 
@@ -172,6 +239,41 @@ extern "system" fn service_control_handler(
                 ServiceControl::Stop | ServiceControl::Shutdown | ServiceControl::Preshutdown => {
                     let _owned_boxed_handler: Box<Box<HandlerFn>> =
                         unsafe { Box::from_raw(context as *mut Box<HandlerFn>) };
+                }
+                _ => (),
+            };
+
+            return_code
+        }
+
+        // Report all unknown control commands as unimplemented
+        Err(_) => ServiceControlHandlerResult::NotImplemented.to_raw(),
+    }
+}
+
+type HandlerFnWithData = Fn(ServiceControl, u32, *mut ::std::os::raw::c_void) -> ServiceControlHandlerResult;
+
+/// Static service control handler
+#[allow(dead_code)]
+extern "system" fn service_control_handler_with_event_data(
+    control: u32,
+    event_type: u32,
+    event_data: *mut ::std::os::raw::c_void,
+    context: *mut ::std::os::raw::c_void,
+) -> u32 {
+    // Important: cast context to &mut Box<HandlerFn> without taking ownership.
+    let handler_fn = unsafe { &mut *(context as *mut Box<HandlerFnWithData>) };
+
+    match ServiceControl::from_raw(control) {
+        Ok(service_control) => {
+            let return_code = ((handler_fn)(service_control, event_type, event_data)).to_raw();
+
+            // Important: release context upon Stop, Shutdown or Preshutdown at the end of the
+            // service lifecycle.
+            match service_control {
+                ServiceControl::Stop | ServiceControl::Shutdown | ServiceControl::Preshutdown => {
+                    let _owned_boxed_handler: Box<Box<HandlerFnWithData>> =
+                        unsafe { Box::from_raw(context as *mut Box<HandlerFnWithData>) };
                 }
                 _ => (),
             };
