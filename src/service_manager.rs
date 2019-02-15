@@ -159,8 +159,9 @@ impl ServiceManager {
         // escape executable path and arguments and combine them into single command
         let executable_path = match service_info.service_type {
             ServiceType::KernelDriver => WideCString::from_str(service_info.executable_path),
-            _ => escape_wide(service_info.executable_path).chain_err(|| ErrorKind::InvalidExecutablePath)?
-        };
+            _ => escape_wide(service_info.executable_path)
+        }.chain_err(|| ErrorKind::InvalidExecutablePath)?;
+
         let mut launch_command_buffer = WideString::new();
         launch_command_buffer.push(executable_path);
 
